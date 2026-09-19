@@ -104,18 +104,19 @@ flowchart LR
 ```
 .
 ├── notebooks/
-│   ├── setup/            # catalog/schema bootstrap, S3 connection check
-│   ├── bronze/           # thin runners: Auto Loader / COPY INTO into Bronze
-│   ├── silver/           # thin runners: MERGE INTO into Silver
-│   ├── gold/              # thin runners: Gold joins/aggregates
-│   ├── data_quality/      # thin runner: DQ checks -> audit table
-│   └── learning/          # original Spark-concept notebooks, kept for reference
+│   ├── setup/          # catalog/schema bootstrap, S3 connection check, dev-only seed data
+│   ├── bronze/         # thin runners: Auto Loader / COPY INTO into Bronze
+│   ├── silver/         # thin runners: MERGE INTO into Silver
+│   ├── gold/           # thin runners: Gold joins/aggregates
+│   ├── data_quality/   # thin runner: DQ checks -> audit table
+│   └── learning/       # original Spark-concept notebooks, kept for reference
 ├── src/retailco_lakehouse/  # all reusable, unit-tested transformation & pipeline logic
-├── tests/                 # pytest suite (local SparkSession)
-├── infra/                 # Terraform for S3 / IAM / Unity Catalog
-├── docs/                  # s3_setup.md, dashboard.md
-├── .github/workflows/     # CI
-├── databricks.yml          # Databricks Asset Bundle (jobs, schedule, targets)
+├── tests/              # pytest suite (local SparkSession)
+├── infra/              # Terraform for S3 / IAM / Unity Catalog
+├── docs/               # s3_setup.md, dashboard.md
+├── .github/workflows/  # CI
+├── databricks.yml      # Databricks Asset Bundle (jobs, schedule, targets)
+├── pyproject.toml      # ruff + pytest config
 ├── requirements.txt
 └── LICENSE
 ```
@@ -230,6 +231,8 @@ pytest
 ```
 
 Tests run against a local, in-process `SparkSession` (no Databricks workspace required) and cover the pure transformation functions in `src/retailco_lakehouse/transform/`, the generic Delta merge helper, and the data-quality checks. See [tests/](tests/).
+
+Needs a JDK (17 works well) on `PATH`/`JAVA_HOME` — that's the one non-Python dependency `pip install` can't get you. On Windows specifically, PySpark also needs a local Hadoop `winutils.exe` + `HADOOP_HOME` for anything that touches local file permissions (Delta included) — see [Hadoop on Windows](https://wiki.apache.org/hadoop/WindowsProblems) if `pytest` fails with `HADOOP_HOME and hadoop.home.dir are unset`. CI (`.github/workflows/ci.yml`) runs on Linux and doesn't hit this.
 
 ## What I changed
 
