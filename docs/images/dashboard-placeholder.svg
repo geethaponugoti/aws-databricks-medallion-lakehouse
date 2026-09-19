@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f3f2f1"/>
+  <rect x="16" y="16" width="928" height="70" rx="6" fill="#ffffff" stroke="#d0d0d0"/>
+  <text x="36" y="58" font-family="Segoe UI, sans-serif" font-size="22" fill="#201f1e">RetailCo — Revenue &amp; Customer Overview</text>
+
+  <g font-family="Segoe UI, sans-serif">
+    <rect x="16" y="102" width="220" height="90" rx="6" fill="#ffffff" stroke="#d0d0d0"/>
+    <text x="32" y="132" font-size="13" fill="#605e5c">Total Revenue</text>
+    <text x="32" y="168" font-size="26" fill="#201f1e">$—</text>
+
+    <rect x="248" y="102" width="220" height="90" rx="6" fill="#ffffff" stroke="#d0d0d0"/>
+    <text x="264" y="132" font-size="13" fill="#605e5c">Total Orders</text>
+    <text x="264" y="168" font-size="26" fill="#201f1e">—</text>
+
+    <rect x="480" y="102" width="220" height="90" rx="6" fill="#ffffff" stroke="#d0d0d0"/>
+    <text x="496" y="132" font-size="13" fill="#605e5c">Avg Order Value</text>
+    <text x="496" y="168" font-size="26" fill="#201f1e">$—</text>
+
+    <rect x="712" y="102" width="232" height="90" rx="6" fill="#ffffff" stroke="#d0d0d0"/>
+    <text x="728" y="132" font-size="13" fill="#605e5c">Active Customers</text>
+    <text x="728" y="168" font-size="26" fill="#201f1e">—</text>
+  </g>
+
+  <rect x="16" y="208" width="560" height="316" rx="6" fill="#ffffff" stroke="#d0d0d0"/>
+  <text x="36" y="234" font-family="Segoe UI, sans-serif" font-size="14" fill="#201f1e">Revenue by month</text>
+  <polyline points="40,480 120,420 200,440 280,360 360,380 440,300 520,320" fill="none" stroke="#0078d4" stroke-width="3"/>
+
+  <rect x="592" y="208" width="352" height="316" rx="6" fill="#ffffff" stroke="#d0d0d0"/>
+  <text x="612" y="234" font-family="Segoe UI, sans-serif" font-size="14" fill="#201f1e">Top customers by revenue</text>
+  <rect x="612" y="256" width="240" height="18" fill="#0078d4"/>
+  <rect x="612" y="284" width="190" height="18" fill="#2b88d8"/>
+  <rect x="612" y="312" width="160" height="18" fill="#71afe5"/>
+  <rect x="612" y="340" width="120" height="18" fill="#a6d0f2"/>
+
+  <text x="480" y="534" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#a19f9d">
+    Placeholder — replace with a real screenshot of the published Power BI report.
+  </text>
+</svg>
