@@ -4,45 +4,47 @@
 # MAGIC `refund_reason` packs two values as `"<reason>:<source>"` (e.g.
 # MAGIC `"Order Cancelled:Customer"`) — split out in Silver.
 # MAGIC
-# MAGIC The upstream billing export doesn't include a refunds file yet, so the original
-# MAGIC project seeded this table with `INSERT` statements. Kept as-is here (table name
-# MAGIC lowercased to match the rest of the catalog); converted to `COPY INTO` from an S3
-# MAGIC CSV extract, matching `bronze_payments`, once that export exists — see the
-# MAGIC incremental-load version of this notebook.
+# MAGIC The original project seeded this table with `INSERT` statements, since the
+# MAGIC upstream billing export didn't include a refunds file yet. Converted here to
+# MAGIC `COPY INTO` from `external_data/refunds/`, matching `bronze_payments` — the
+# MAGIC same incremental, no-duplicate-loads pattern. For a local/demo run without a
+# MAGIC real export, `notebooks/setup/seed_sample_refunds_data.py` writes the original
+# MAGIC ten sample rows as a CSV to that path.
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "retailco", "Catalog name")
+dbutils.widgets.text("bucket_name", "", "S3 bucket name")
 catalog = dbutils.widgets.get("catalog")
+bucket_name = dbutils.widgets.get("bucket_name")
+assert bucket_name, "Set the bucket_name widget/parameter before running this notebook."
+
+target_table = f"{catalog}.bronze.refunds"
+source_path = f"s3://{bucket_name}/external_data/refunds/"
 
 # COMMAND ----------
 
 spark.sql(f"""
-CREATE TABLE IF NOT EXISTS {catalog}.bronze.refunds (
+CREATE TABLE IF NOT EXISTS {target_table} (
     refund_id INT,
-    payment_id INT NOT NULL,
-    refund_timestamp TIMESTAMP NOT NULL,
-    refund_amount DECIMAL(10, 2) NOT NULL,
-    refund_reason STRING NOT NULL
+    payment_id INT,
+    refund_timestamp TIMESTAMP,
+    refund_amount DECIMAL(10, 2),
+    refund_reason STRING
 )
+USING DELTA
 """)
 
 # COMMAND ----------
 
 spark.sql(f"""
-INSERT INTO {catalog}.bronze.refunds
-  (refund_id, payment_id, refund_timestamp, refund_amount, refund_reason)
-VALUES
-  (1, 66, '2025-01-10 11:30:00', 85.75, 'Payment Error:Retailer'),
-  (2, 69, '2025-01-03 12:40:15', 120.50, 'Order Cancelled:Customer'),
-  (3, 72, '2025-01-06 14:45:30', 65.00, 'Product Returned:Customer'),
-  (4, 73, '2025-01-07 16:10:45', 210.99, 'Order Cancelled:Customer'),
-  (5, 75, '2025-01-09 18:25:00', 45.20, 'Payment Error:Retailer'),
-  (6, 80, '2025-01-10 09:35:20', 130.15, 'Order Cancelled:Customer'),
-  (7, 83, '2025-01-12 11:20:40', 150.00, 'Product Returned:Customer'),
-  (8, 85, '2025-01-14 13:15:30', 89.99, 'Order Cancelled:Customer'),
-  (9, 89, '2025-01-15 15:00:00', 78.50, 'Payment Error:Retailer'),
-  (10, 91, '2025-01-17 16:45:15', 250.75, 'Product Returned:Customer')
+COPY INTO {target_table}
+FROM '{source_path}'
+FILEFORMAT = CSV
+FORMAT_OPTIONS ('header' = 'true', 'delimiter' = ',', 'inferSchema' = 'false')
+COPY_OPTIONS ('mergeSchema' = 'true')
 """)
 
-display(spark.table(f"{catalog}.bronze.refunds"))
+# COMMAND ----------
+
+display(spark.table(target_table))

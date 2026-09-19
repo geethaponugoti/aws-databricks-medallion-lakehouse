@@ -6,16 +6,21 @@
 # MAGIC 1. Fix the one malformed field in the raw JSON text (`order_date` isn't quoted).
 # MAGIC 2. Parse it into a struct with a known schema.
 # MAGIC 3. Explode the `items` array to one row per line item and flatten it.
+# MAGIC 4. Upsert into `retailco.silver.orders` with `MERGE INTO`, keyed on
+# MAGIC    `(order_id, item_id)` since the grain is one row per order line item.
 # MAGIC
-# MAGIC The original version persisted step 2's output as its own table
-# MAGIC (`silver.orders_json`) before exploding it in a second notebook. That
-# MAGIC intermediate table added no value downstream, so it's collapsed into a single
-# MAGIC temp view here — one less table to maintain and keep in sync.
+# MAGIC The original persisted step 2's output as its own table (`silver.orders_json`)
+# MAGIC before exploding it in a second notebook. That intermediate table added no
+# MAGIC value downstream, so it's collapsed into a single in-memory step here.
 
 # COMMAND ----------
 
+from delta.tables import DeltaTable
+from pyspark.sql import functions as F
+
 dbutils.widgets.text("catalog", "retailco", "Catalog name")
 catalog = dbutils.widgets.get("catalog")
+target_table = f"{catalog}.silver.orders"
 
 ORDER_SCHEMA = (
     "STRUCT<"
@@ -39,48 +44,56 @@ ORDER_SCHEMA = (
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Fix the malformed date field and parse to JSON
+bronze = spark.table(f"{catalog}.bronze.orders")
 
-# COMMAND ----------
-
-spark.sql(f"""
-CREATE OR REPLACE TEMPORARY VIEW tv_orders_parsed AS
-SELECT from_json(
-  regexp_replace(value, '"order_date": (\\\\d{{4}}-\\\\d{{2}}-\\\\d{{2}})', '"order_date":"$1"'),
-  '{ORDER_SCHEMA}'
-) AS json_value
-FROM {catalog}.bronze.v_orders
-""")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Deduplicate and explode the line items, then write to Silver
-
-# COMMAND ----------
-
-spark.sql(f"""
-CREATE OR REPLACE TABLE {catalog}.silver.orders
-AS
-SELECT
-  json_value.order_id AS order_id,
-  json_value.order_status AS order_status,
-  json_value.payment_method AS payment_method,
-  json_value.total_amount AS total_amount,
-  CAST(json_value.transaction_timestamp AS TIMESTAMP) AS transaction_timestamp,
-  json_value.customer_id AS customer_id,
-  item.item_id AS item_id,
-  item.name AS name,
-  item.price AS price,
-  item.quantity AS quantity,
-  item.category AS category,
-  item.details.brand AS brand,
-  item.details.color AS color
-FROM (
-  SELECT json_value, explode(array_distinct(json_value.items)) AS item
-  FROM tv_orders_parsed
+fixed = bronze.withColumn(
+    "fixed_value",
+    F.regexp_replace(
+        F.col("value"),
+        r'"order_date": (\d{4}-\d{2}-\d{2})',
+        r'"order_date":"$1"',
+    ),
 )
-""")
 
-display(spark.table(f"{catalog}.silver.orders"))
+parsed = fixed.select(F.from_json("fixed_value", ORDER_SCHEMA).alias("json_value"))
+
+exploded = parsed.select(
+    "json_value", F.explode(F.array_distinct("json_value.items")).alias("item")
+)
+
+updates = exploded.select(
+    F.col("json_value.order_id").alias("order_id"),
+    F.col("json_value.order_status").alias("order_status"),
+    F.col("json_value.payment_method").alias("payment_method"),
+    F.col("json_value.total_amount").alias("total_amount"),
+    F.col("json_value.transaction_timestamp").cast("timestamp").alias("transaction_timestamp"),
+    F.col("json_value.customer_id").alias("customer_id"),
+    F.col("item.item_id").alias("item_id"),
+    F.col("item.name").alias("name"),
+    F.col("item.price").alias("price"),
+    F.col("item.quantity").alias("quantity"),
+    F.col("item.category").alias("category"),
+    F.col("item.details.brand").alias("brand"),
+    F.col("item.details.color").alias("color"),
+)
+
+# COMMAND ----------
+
+if spark.catalog.tableExists(target_table):
+    (
+        DeltaTable.forName(spark, target_table)
+        .alias("target")
+        .merge(
+            updates.alias("updates"),
+            "target.order_id = updates.order_id AND target.item_id = updates.item_id",
+        )
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+else:
+    updates.write.format("delta").option("mergeSchema", "true").saveAsTable(target_table)
+
+# COMMAND ----------
+
+display(spark.table(target_table))

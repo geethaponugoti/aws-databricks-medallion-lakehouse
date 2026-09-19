@@ -2,38 +2,55 @@
 # MAGIC %md
 # MAGIC # Silver: customers
 # MAGIC Drops rows with a null `customer_id`, deduplicates to the latest
-# MAGIC `created_timestamp` per customer, and casts columns to their proper types.
-# MAGIC
-# MAGIC Original version used bare `CREATE TABLE ... AS`, which fails on a second run.
-# MAGIC Changed to `CREATE OR REPLACE TABLE` here so the notebook is re-runnable.
+# MAGIC `created_timestamp` per customer, casts columns to their proper types, and
+# MAGIC upserts into `retailco.silver.customers` with `MERGE INTO`. Replaces the
+# MAGIC original `CREATE TABLE ... AS SELECT` full rebuild — safe to re-run against an
+# MAGIC incrementally-loaded Bronze table without reprocessing history as duplicates.
 
 # COMMAND ----------
+
+from delta.tables import DeltaTable
+from pyspark.sql import Window
+from pyspark.sql import functions as F
 
 dbutils.widgets.text("catalog", "retailco", "Catalog name")
 catalog = dbutils.widgets.get("catalog")
+target_table = f"{catalog}.silver.customers"
 
 # COMMAND ----------
 
-spark.sql(f"""
-CREATE OR REPLACE TABLE {catalog}.silver.customers
-AS
-WITH latest AS (
-  SELECT customer_id, MAX(created_timestamp) AS created_timestamp
-  FROM {catalog}.bronze.v_customers
-  WHERE customer_id IS NOT NULL
-  GROUP BY customer_id
-)
-SELECT DISTINCT
-  CAST(b.created_timestamp AS TIMESTAMP) AS created_timestamp,
-  b.customer_id,
-  b.customer_name,
-  CAST(b.date_of_birth AS DATE) AS date_of_birth,
-  b.email,
-  CAST(b.member_since AS DATE) AS member_since,
-  b.telephone
-FROM {catalog}.bronze.v_customers b
-JOIN latest l
-  ON b.customer_id = l.customer_id AND b.created_timestamp = l.created_timestamp
-""")
+bronze = spark.table(f"{catalog}.bronze.customers").filter(F.col("customer_id").isNotNull())
 
-display(spark.table(f"{catalog}.silver.customers"))
+latest_per_customer = Window.partitionBy("customer_id").orderBy(F.col("created_timestamp").desc())
+
+updates = (
+    bronze.withColumn("_rn", F.row_number().over(latest_per_customer))
+    .filter(F.col("_rn") == 1)
+    .select(
+        F.col("customer_id").cast("long").alias("customer_id"),
+        F.col("customer_name"),
+        F.col("date_of_birth").cast("date").alias("date_of_birth"),
+        F.col("email"),
+        F.col("member_since").cast("date").alias("member_since"),
+        F.col("telephone"),
+        F.col("created_timestamp").cast("timestamp").alias("created_timestamp"),
+    )
+)
+
+# COMMAND ----------
+
+if spark.catalog.tableExists(target_table):
+    (
+        DeltaTable.forName(spark, target_table)
+        .alias("target")
+        .merge(updates.alias("updates"), "target.customer_id = updates.customer_id")
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+else:
+    updates.write.format("delta").option("mergeSchema", "true").saveAsTable(target_table)
+
+# COMMAND ----------
+
+display(spark.table(target_table))
