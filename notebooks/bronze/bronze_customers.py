@@ -1,50 +1,44 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Bronze: customers
-# MAGIC Incrementally ingests customer JSON files from the landing volume into
-# MAGIC `retailco.bronze.customers` using Auto Loader. Auto Loader's checkpoint tracks
-# MAGIC which files have already been processed, so re-running this notebook never
-# MAGIC reprocesses or duplicates a file — a `CREATE OR REPLACE VIEW` over the raw path
-# MAGIC (the original approach) re-reads everything, every time. New source columns are
-# MAGIC picked up automatically (`cloudFiles.schemaEvolutionMode = addNewColumns`)
-# MAGIC instead of silently breaking the read.
+# MAGIC Thin runner — logic lives in `src/retailco_lakehouse`. Incrementally ingests
+# MAGIC customer JSON files from the landing volume into `retailco.bronze.customers`
+# MAGIC via Auto Loader; already-processed files are never reprocessed.
 
 # COMMAND ----------
 
-from pyspark.sql import functions as F
+import os
+import sys
+
+sys.path.append(os.path.abspath("../../src"))
+
+from pyspark.sql import functions as F  # noqa: E402
+
+from retailco_lakehouse.autoloader import run_autoloader_to_table  # noqa: E402
+from retailco_lakehouse.config import load_config  # noqa: E402
+
+# COMMAND ----------
 
 dbutils.widgets.text("catalog", "retailco", "Catalog name")
 dbutils.widgets.text("bucket_name", "", "S3 bucket name")
-catalog = dbutils.widgets.get("catalog")
-bucket_name = dbutils.widgets.get("bucket_name")
-assert bucket_name, "Set the bucket_name widget/parameter before running this notebook."
-
-source_path = f"/Volumes/{catalog}/landing/operational_data/customers"
-checkpoint_path = f"s3://{bucket_name}/_checkpoints/bronze/customers"
-schema_tracking_path = f"s3://{bucket_name}/_schemas/bronze/customers"
-target_table = f"{catalog}.bronze.customers"
+config = load_config(dbutils)
+assert config.bucket_name, "Set the bucket_name widget/parameter before running this notebook."
 
 # COMMAND ----------
 
-raw_stream = (
-    spark.readStream.format("cloudFiles")
-    .option("cloudFiles.format", "json")
-    .option("cloudFiles.schemaLocation", schema_tracking_path)
-    .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
-    .load(source_path)
-    .withColumn("file_path", F.col("_metadata.file_path"))
-    .withColumn("ingested_at", F.current_timestamp())
+run_autoloader_to_table(
+    spark,
+    source_path=config.landing_path("customers"),
+    file_format="json",
+    target_table=config.table("bronze", "customers"),
+    checkpoint_path=config.checkpoint_path("bronze", "customers"),
+    schema_tracking_path=config.schema_tracking_path("bronze", "customers"),
+    extra_columns={
+        "file_path": F.col("_metadata.file_path"),
+        "ingested_at": F.current_timestamp(),
+    },
 )
-
-query = (
-    raw_stream.writeStream.format("delta")
-    .option("checkpointLocation", checkpoint_path)
-    .option("mergeSchema", "true")
-    .trigger(availableNow=True)
-    .toTable(target_table)
-)
-query.awaitTermination()
 
 # COMMAND ----------
 
-display(spark.table(target_table))
+display(spark.table(config.table("bronze", "customers")))

@@ -1,26 +1,29 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Bronze: refunds
-# MAGIC `refund_reason` packs two values as `"<reason>:<source>"` (e.g.
-# MAGIC `"Order Cancelled:Customer"`) — split out in Silver.
-# MAGIC
-# MAGIC The original project seeded this table with `INSERT` statements, since the
-# MAGIC upstream billing export didn't include a refunds file yet. Converted here to
-# MAGIC `COPY INTO` from `external_data/refunds/`, matching `bronze_payments` — the
-# MAGIC same incremental, no-duplicate-loads pattern. For a local/demo run without a
-# MAGIC real export, `notebooks/setup/seed_sample_refunds_data.py` writes the original
-# MAGIC ten sample rows as a CSV to that path.
+# MAGIC Thin runner — logic lives in `src/retailco_lakehouse`. Loads new files from the
+# MAGIC external refunds CSV extract into `retailco.bronze.refunds` via `COPY INTO`.
+# MAGIC For a local/demo run without a real export, run
+# MAGIC `notebooks/setup/seed_sample_refunds_data.py` first.
+
+# COMMAND ----------
+
+import os
+import sys
+
+sys.path.append(os.path.abspath("../../src"))
+
+from retailco_lakehouse.config import load_config  # noqa: E402
+from retailco_lakehouse.copy_into import copy_into  # noqa: E402
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "retailco", "Catalog name")
 dbutils.widgets.text("bucket_name", "", "S3 bucket name")
-catalog = dbutils.widgets.get("catalog")
-bucket_name = dbutils.widgets.get("bucket_name")
-assert bucket_name, "Set the bucket_name widget/parameter before running this notebook."
+config = load_config(dbutils)
+assert config.bucket_name, "Set the bucket_name widget/parameter before running this notebook."
 
-target_table = f"{catalog}.bronze.refunds"
-source_path = f"s3://{bucket_name}/external_data/refunds/"
+target_table = config.table("bronze", "refunds")
 
 # COMMAND ----------
 
@@ -37,13 +40,7 @@ USING DELTA
 
 # COMMAND ----------
 
-spark.sql(f"""
-COPY INTO {target_table}
-FROM '{source_path}'
-FILEFORMAT = CSV
-FORMAT_OPTIONS ('header' = 'true', 'delimiter' = ',', 'inferSchema' = 'false')
-COPY_OPTIONS ('mergeSchema' = 'true')
-""")
+copy_into(spark, target_table, config.external_path("refunds"))
 
 # COMMAND ----------
 

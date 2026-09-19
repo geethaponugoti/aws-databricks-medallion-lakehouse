@@ -1,44 +1,40 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Bronze: memberships
-# MAGIC Membership card images, one PNG per customer, ingested via Auto Loader's
-# MAGIC `binaryFile` format. `customer_id` is embedded in the filename and extracted
-# MAGIC in Silver.
+# MAGIC Thin runner — logic lives in `src/retailco_lakehouse`. Ingests membership card
+# MAGIC PNGs via Auto Loader's `binaryFile` format into `retailco.bronze.memberships`.
 
 # COMMAND ----------
 
-from pyspark.sql import functions as F
+import os
+import sys
+
+sys.path.append(os.path.abspath("../../src"))
+
+from pyspark.sql import functions as F  # noqa: E402
+
+from retailco_lakehouse.autoloader import run_autoloader_to_table  # noqa: E402
+from retailco_lakehouse.config import load_config  # noqa: E402
+
+# COMMAND ----------
 
 dbutils.widgets.text("catalog", "retailco", "Catalog name")
 dbutils.widgets.text("bucket_name", "", "S3 bucket name")
-catalog = dbutils.widgets.get("catalog")
-bucket_name = dbutils.widgets.get("bucket_name")
-assert bucket_name, "Set the bucket_name widget/parameter before running this notebook."
-
-source_path = f"/Volumes/{catalog}/landing/operational_data/memberships/*/*.png"
-checkpoint_path = f"s3://{bucket_name}/_checkpoints/bronze/memberships"
-schema_tracking_path = f"s3://{bucket_name}/_schemas/bronze/memberships"
-target_table = f"{catalog}.bronze.memberships"
+config = load_config(dbutils)
+assert config.bucket_name, "Set the bucket_name widget/parameter before running this notebook."
 
 # COMMAND ----------
 
-raw_stream = (
-    spark.readStream.format("cloudFiles")
-    .option("cloudFiles.format", "binaryFile")
-    .option("cloudFiles.schemaLocation", schema_tracking_path)
-    .load(source_path)
-    .withColumn("ingested_at", F.current_timestamp())
+run_autoloader_to_table(
+    spark,
+    source_path=f"{config.landing_path('memberships')}/*/*.png",
+    file_format="binaryFile",
+    target_table=config.table("bronze", "memberships"),
+    checkpoint_path=config.checkpoint_path("bronze", "memberships"),
+    schema_tracking_path=config.schema_tracking_path("bronze", "memberships"),
+    extra_columns={"ingested_at": F.current_timestamp()},
 )
-
-query = (
-    raw_stream.writeStream.format("delta")
-    .option("checkpointLocation", checkpoint_path)
-    .option("mergeSchema", "true")
-    .trigger(availableNow=True)
-    .toTable(target_table)
-)
-query.awaitTermination()
 
 # COMMAND ----------
 
-display(spark.table(target_table))
+display(spark.table(config.table("bronze", "memberships")))

@@ -1,0 +1,17 @@
+[project]
+name = "retailco-lakehouse"
+version = "0.1.0"
+description = "RetailCo medallion lakehouse pipeline logic"
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

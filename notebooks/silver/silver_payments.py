@@ -1,49 +1,32 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Silver: payments
-# MAGIC Splits `payment_date` into a date and a time-of-day column, decodes the
-# MAGIC numeric `payment_status` code into a descriptive value, and upserts into
-# MAGIC `retailco.silver.payments` with `MERGE INTO` keyed on `payment_id`.
+# MAGIC Thin runner — logic lives in `src/retailco_lakehouse`. Splits `payment_date`,
+# MAGIC decodes `payment_status`, and upserts into `retailco.silver.payments`.
 
 # COMMAND ----------
 
-from delta.tables import DeltaTable
-from pyspark.sql import functions as F
+import os
+import sys
+
+sys.path.append(os.path.abspath("../../src"))
+
+from retailco_lakehouse.config import load_config  # noqa: E402
+from retailco_lakehouse.delta_merge import merge_into  # noqa: E402
+from retailco_lakehouse.transform.payments import MERGE_KEYS, clean_payments  # noqa: E402
+
+# COMMAND ----------
 
 dbutils.widgets.text("catalog", "retailco", "Catalog name")
-catalog = dbutils.widgets.get("catalog")
-target_table = f"{catalog}.silver.payments"
+config = load_config(dbutils)
 
-PAYMENT_STATUS_MAP = {"1": "Success", "2": "Pending", "3": "Cancelled", "4": "Failed"}
-
-# COMMAND ----------
-
-bronze = spark.table(f"{catalog}.bronze.payments")
-status_map = F.create_map([F.lit(x) for pair in PAYMENT_STATUS_MAP.items() for x in pair])
-
-updates = bronze.select(
-    "payment_id",
-    "customer_id",
-    F.to_date("payment_date").alias("payment_date"),
-    F.date_format("payment_date", "HH:mm:ss").alias("payment_time"),
-    status_map[F.col("payment_status").cast("string")].alias("payment_status"),
-    "payment_method",
-)
+bronze = spark.table(config.table("bronze", "payments"))
+updates = clean_payments(bronze)
 
 # COMMAND ----------
 
-if spark.catalog.tableExists(target_table):
-    (
-        DeltaTable.forName(spark, target_table)
-        .alias("target")
-        .merge(updates.alias("updates"), "target.payment_id = updates.payment_id")
-        .whenMatchedUpdateAll()
-        .whenNotMatchedInsertAll()
-        .execute()
-    )
-else:
-    updates.write.format("delta").option("mergeSchema", "true").saveAsTable(target_table)
+merge_into(spark, config.table("silver", "payments"), updates, MERGE_KEYS)
 
 # COMMAND ----------
 
-display(spark.table(target_table))
+display(spark.table(config.table("silver", "payments")))

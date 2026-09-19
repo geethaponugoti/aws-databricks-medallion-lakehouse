@@ -1,31 +1,34 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Gold: order_summary_monthly
-# MAGIC Total orders, items, and revenue per customer per month. Excludes cancelled
-# MAGIC and pending orders, since neither represents realized revenue.
-# MAGIC
-# MAGIC Fixed a typo carried through the original pipeline: the output column was
-# MAGIC named `total_amnount`. Renamed to `total_amount` here.
+# MAGIC Thin runner — logic lives in `src/retailco_lakehouse`. Total orders, items, and
+# MAGIC revenue per customer per month, excluding cancelled/pending orders.
+
+# COMMAND ----------
+
+import os
+import sys
+
+sys.path.append(os.path.abspath("../../src"))
+
+from retailco_lakehouse.config import load_config  # noqa: E402
+from retailco_lakehouse.transform.gold import build_monthly_order_summary  # noqa: E402
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "retailco", "Catalog name")
-catalog = dbutils.widgets.get("catalog")
+config = load_config(dbutils)
+
+orders = spark.table(config.table("silver", "orders"))
+result = build_monthly_order_summary(orders)
 
 # COMMAND ----------
 
-spark.sql(f"""
-CREATE OR REPLACE TABLE {catalog}.gold.order_summary_monthly
-AS
-SELECT
-  customer_id,
-  date_format(transaction_timestamp, 'yyyy-MM') AS transaction_month,
-  COUNT(DISTINCT order_id) AS total_orders,
-  SUM(quantity) AS total_items,
-  SUM(quantity * price) AS total_amount
-FROM {catalog}.silver.orders
-WHERE order_status NOT IN ('Cancelled', 'Pending')
-GROUP BY customer_id, date_format(transaction_timestamp, 'yyyy-MM')
-""")
+# Gold is a cheap, fully-derived recompute — no incremental state to merge.
+result.write.format("delta").mode("overwrite").option("mergeSchema", "true").saveAsTable(
+    config.table("gold", "order_summary_monthly")
+)
 
-display(spark.table(f"{catalog}.gold.order_summary_monthly"))
+# COMMAND ----------
+
+display(spark.table(config.table("gold", "order_summary_monthly")))

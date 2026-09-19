@@ -1,0 +1,6 @@
+# Local development and CI only — pyspark and delta-spark ship with the
+# Databricks Runtime, so this file is never installed on a job cluster.
+pyspark==3.5.3
+delta-spark==3.2.1
+pytest==8.3.3
+ruff==0.6.9

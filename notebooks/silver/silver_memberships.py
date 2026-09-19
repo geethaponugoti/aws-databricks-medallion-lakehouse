@@ -1,42 +1,33 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Silver: memberships
-# MAGIC Extracts `customer_id` from the membership card filename (`.../<customer_id>.png`)
-# MAGIC and upserts into `retailco.silver.memberships` with `MERGE INTO` keyed on
-# MAGIC `customer_id`.
+# MAGIC Thin runner — logic lives in `src/retailco_lakehouse`. Extracts `customer_id`
+# MAGIC from the membership card filename and upserts into
+# MAGIC `retailco.silver.memberships`.
 
 # COMMAND ----------
 
-from delta.tables import DeltaTable
-from pyspark.sql import functions as F
+import os
+import sys
+
+sys.path.append(os.path.abspath("../../src"))
+
+from retailco_lakehouse.config import load_config  # noqa: E402
+from retailco_lakehouse.delta_merge import merge_into  # noqa: E402
+from retailco_lakehouse.transform.memberships import MERGE_KEYS, clean_memberships  # noqa: E402
+
+# COMMAND ----------
 
 dbutils.widgets.text("catalog", "retailco", "Catalog name")
-catalog = dbutils.widgets.get("catalog")
-target_table = f"{catalog}.silver.memberships"
+config = load_config(dbutils)
+
+bronze = spark.table(config.table("bronze", "memberships"))
+updates = clean_memberships(bronze)
 
 # COMMAND ----------
 
-bronze = spark.table(f"{catalog}.bronze.memberships")
-
-updates = bronze.select(
-    F.regexp_extract("path", r".*/([0-9]+)\.png$", 1).alias("customer_id"),
-    F.col("content").alias("membership_card"),
-)
+merge_into(spark, config.table("silver", "memberships"), updates, MERGE_KEYS)
 
 # COMMAND ----------
 
-if spark.catalog.tableExists(target_table):
-    (
-        DeltaTable.forName(spark, target_table)
-        .alias("target")
-        .merge(updates.alias("updates"), "target.customer_id = updates.customer_id")
-        .whenMatchedUpdateAll()
-        .whenNotMatchedInsertAll()
-        .execute()
-    )
-else:
-    updates.write.format("delta").option("mergeSchema", "true").saveAsTable(target_table)
-
-# COMMAND ----------
-
-display(spark.table(target_table))
+display(spark.table(config.table("silver", "memberships")))
