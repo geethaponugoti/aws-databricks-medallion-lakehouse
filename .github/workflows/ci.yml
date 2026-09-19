@@ -34,9 +34,11 @@ jobs:
   validate-bundle:
     name: Validate Databricks Asset Bundle
     runs-on: ubuntu-latest
-    # Requires DATABRICKS_HOST / DATABRICKS_TOKEN repo secrets pointing at a
-    # workspace, and databricks.yml's target workspace hosts filled in (see
-    # setup step 2 in the README) — this job is a no-op stub until then.
+    # Skipped until DATABRICKS_HOST / DATABRICKS_TOKEN repo secrets are set
+    # (Settings -> Secrets and variables -> Actions) and databricks.yml's
+    # target workspace hosts are filled in (see setup step 2 in the README) —
+    # rather than a hard failure on every run before that's done.
+    if: ${{ secrets.DATABRICKS_HOST != '' }}
     steps:
       - uses: actions/checkout@v4
 

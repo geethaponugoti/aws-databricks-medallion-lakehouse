@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from retailco_lakehouse.transform.gold import build_customer_address, build_monthly_order_summary
 
 
@@ -37,9 +39,9 @@ def test_build_customer_address_drops_customers_without_an_address(spark):
 def test_build_monthly_order_summary_excludes_cancelled_and_pending(spark):
     orders = spark.createDataFrame(
         [
-            (1, "Completed", "2024-05-01T10:00:00", 10, 2, 100),
-            (2, "Cancelled", "2024-05-02T10:00:00", 10, 1, 50),
-            (3, "Pending", "2024-05-03T10:00:00", 10, 1, 20),
+            (1, "Completed", datetime(2024, 5, 1, 10, 0, 0), 10, 2, 100),
+            (2, "Cancelled", datetime(2024, 5, 2, 10, 0, 0), 10, 1, 50),
+            (3, "Pending", datetime(2024, 5, 3, 10, 0, 0), 10, 1, 20),
         ],
         schema="order_id long, order_status string, transaction_timestamp timestamp, "
         "customer_id long, quantity long, price long",
@@ -57,8 +59,8 @@ def test_build_monthly_order_summary_excludes_cancelled_and_pending(spark):
 def test_build_monthly_order_summary_computes_total_amount_as_price_times_quantity(spark):
     orders = spark.createDataFrame(
         [
-            (1, "Completed", "2024-05-01T10:00:00", 10, 3, 15),
-            (1, "Completed", "2024-05-01T10:00:00", 10, 1, 100),
+            (1, "Completed", datetime(2024, 5, 1, 10, 0, 0), 10, 3, 15),
+            (1, "Completed", datetime(2024, 5, 1, 10, 0, 0), 10, 1, 100),
         ],
         schema="order_id long, order_status string, transaction_timestamp timestamp, "
         "customer_id long, quantity long, price long",

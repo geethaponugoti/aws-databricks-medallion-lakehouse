@@ -48,7 +48,9 @@ def test_clean_orders_explodes_one_row_per_line_item(spark):
 
 def test_explode_order_items_deduplicates_identical_items(spark):
     duplicated_items_line = RAW_ORDER_LINE.replace(
+        '{"category": "Electronics", "details": {"brand": "Acme", "color": "red"}, '
         '"item_id": 2, "name": "Gadget", "price": 40, "quantity": 1}',
+        '{"category": "Electronics", "details": {"brand": "Acme", "color": "black"}, '
         '"item_id": 1, "name": "Widget", "price": 25, "quantity": 2}',
     )
     parsed = parse_orders(_bronze(spark, [duplicated_items_line]))
