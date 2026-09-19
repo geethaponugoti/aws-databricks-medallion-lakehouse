@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars (already gitignored) and fill in your own values.
+# AWS and Databricks credentials do NOT go here — set them as environment
+# variables instead (see providers.tf).
+
+bucket_name = "retailco-lakehouse-dev" # must be globally unique
+aws_region  = "us-east-1"
+
+iam_role_name           = "retailco-databricks-s3-access-role"
+storage_credential_name = "retailco-s3-credential"
+external_location_name  = "retailco-s3-location"
+
+tags = {
+  project     = "aws-databricks-medallion-lakehouse"
+  environment = "dev"
+}
