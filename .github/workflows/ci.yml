@@ -34,11 +34,14 @@ jobs:
   validate-bundle:
     name: Validate Databricks Asset Bundle
     runs-on: ubuntu-latest
-    # Skipped until DATABRICKS_HOST / DATABRICKS_TOKEN repo secrets are set
-    # (Settings -> Secrets and variables -> Actions) and databricks.yml's
-    # target workspace hosts are filled in (see setup step 2 in the README) —
-    # rather than a hard failure on every run before that's done.
-    if: ${{ secrets.DATABRICKS_HOST != '' }}
+    # Skipped until a DATABRICKS_HOST repo *variable* (Settings -> Secrets
+    # and variables -> Actions -> Variables — it's a workspace URL, not
+    # sensitive) and a DATABRICKS_TOKEN repo *secret* are set, and
+    # databricks.yml's target workspace hosts are filled in (see setup step 2
+    # in the README) — rather than a hard failure on every run before that's
+    # done. (job-level `if:` can only see the vars context, not secrets —
+    # that's why the gate is on the variable, not the token.)
+    if: ${{ vars.DATABRICKS_HOST != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,5 +51,5 @@ jobs:
       - name: databricks bundle validate
         run: databricks bundle validate -t dev
         env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
