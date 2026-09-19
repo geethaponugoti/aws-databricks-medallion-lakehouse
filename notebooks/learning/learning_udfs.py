@@ -22,7 +22,7 @@ RETURNS STRING
 RETURN CONCAT(initcap(firstname), ' ', initcap(surname))
 """)
 
-display(spark.sql(f"SELECT {catalog}.default.get_full_name('amanullah', 's') AS full_name"))
+display(spark.sql(f"SELECT {catalog}.default.get_full_name('ada', 'lovelace') AS full_name"))
 
 # COMMAND ----------
 

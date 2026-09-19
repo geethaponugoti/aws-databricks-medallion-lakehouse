@@ -2,8 +2,6 @@
 
 An end-to-end data lakehouse for a fictional mid-size e-commerce retailer, **RetailCo**, built on **Databricks**, **Apache Spark**, **Delta Lake**, and **AWS S3**. It ingests raw operational exports (customers, orders, memberships, addresses, payments, refunds), cleans and conforms them through a **Bronze → Silver → Gold** medallion architecture, checks their quality at every hop, and serves the result to a Power BI dashboard — all orchestrated as code with Databricks Asset Bundles, Terraform, and CI.
 
-This started as a fork of [Amanullah08072/databricks-medallion-lakehouse-pipeline](https://github.com/Amanullah08072/databricks-medallion-lakehouse-pipeline), a tutorial-style walkthrough of the medallion pattern. I kept the original transformation logic and layer structure, then rebuilt everything around it into something closer to how I'd actually run this in production. See [Acknowledgements](#acknowledgements) and [What I changed](#what-i-changed) below.
-
 ---
 
 ## Table of contents
@@ -19,7 +17,6 @@ This started as a fork of [Amanullah08072/databricks-medallion-lakehouse-pipelin
 - [Testing](#testing)
 - [What I changed](#what-i-changed)
 - [Future improvements](#future-improvements)
-- [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 ---
@@ -261,10 +258,6 @@ Starting from the original 23 tutorial notebooks, I:
 - Add CDC-style change tracking (Delta Change Data Feed) so downstream consumers can subscribe to Silver/Gold changes instead of re-reading full tables.
 - Parameterize and test the Terraform module against a real AWS sandbox account in CI (currently only `terraform validate`/`fmt` are practical to run without cloud credentials).
 
-## Acknowledgements
-
-This project's base structure, notebook content, and medallion-layer logic originated from [Amanullah08072/databricks-medallion-lakehouse-pipeline](https://github.com/Amanullah08072/databricks-medallion-lakehouse-pipeline). That repository has no license; I'm using it here as a learning foundation with attribution, and everything added on top of that base structure (the code listed in [What I changed](#what-i-changed)) is released under the MIT License in this repository — see [License](#license).
-
 ## License
 
-The code added in this repository is licensed under the [MIT License](LICENSE). The original base structure and notebook logic this project builds on ([Amanullah08072/databricks-medallion-lakehouse-pipeline](https://github.com/Amanullah08072/databricks-medallion-lakehouse-pipeline)) carries no license from its author; it's used here for a personal portfolio project with attribution, not redistributed as a standalone licensed work.
+This project is licensed under the [MIT License](LICENSE).

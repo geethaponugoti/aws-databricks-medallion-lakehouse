@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This license covers the code added in this repository (see the "What I
-changed" and "Acknowledgements" sections of README.md). The original base
-structure and notebook logic this project builds on
-(https://github.com/Amanullah08072/databricks-medallion-lakehouse-pipeline)
-carries no license from its author and is not itself covered by this license.
