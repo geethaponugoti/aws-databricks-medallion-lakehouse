@@ -1,0 +1,239 @@
+bundle:
+  name: aws-databricks-medallion-lakehouse
+
+variables:
+  catalog:
+    description: Unity Catalog catalog name for this environment.
+    default: retailco
+  bucket_name:
+    description: >
+      S3 bucket backing this environment's lakehouse. No default on purpose —
+      set it per target below, or override with `-v bucket_name=...` on
+      deploy/run. Never hardcode a real bucket name in source.
+
+# A single job cluster, shared by every task in the job, sized for a small
+# nightly batch. Bump node_type_id / num_workers for real data volumes.
+resources:
+  jobs:
+    medallion_pipeline:
+      name: retailco-medallion-pipeline-${bundle.target}
+
+      schedule:
+        quartz_cron_expression: "0 0 3 * * ?" # daily at 03:00
+        timezone_id: "UTC"
+
+      job_clusters:
+        - job_cluster_key: main
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: i3.xlarge
+            num_workers: 1
+            data_security_mode: SINGLE_USER
+            aws_attributes:
+              first_on_demand: 1
+              availability: SPOT_WITH_FALLBACK
+
+      tasks:
+        - task_key: setup_catalog
+          job_cluster_key: main
+          notebook_task:
+            notebook_path: notebooks/setup/00_setup_catalog_and_schemas.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bucket_name: ${var.bucket_name}
+          max_retries: 1
+
+        # --- Bronze: fan out, each depends only on the catalog/schemas existing ---
+        - task_key: bronze_customers
+          job_cluster_key: main
+          depends_on:
+            - task_key: setup_catalog
+          notebook_task:
+            notebook_path: notebooks/bronze/bronze_customers.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bucket_name: ${var.bucket_name}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: bronze_orders
+          job_cluster_key: main
+          depends_on:
+            - task_key: setup_catalog
+          notebook_task:
+            notebook_path: notebooks/bronze/bronze_orders.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bucket_name: ${var.bucket_name}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: bronze_memberships
+          job_cluster_key: main
+          depends_on:
+            - task_key: setup_catalog
+          notebook_task:
+            notebook_path: notebooks/bronze/bronze_memberships.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bucket_name: ${var.bucket_name}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: bronze_addresses
+          job_cluster_key: main
+          depends_on:
+            - task_key: setup_catalog
+          notebook_task:
+            notebook_path: notebooks/bronze/bronze_addresses.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bucket_name: ${var.bucket_name}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: bronze_payments
+          job_cluster_key: main
+          depends_on:
+            - task_key: setup_catalog
+          notebook_task:
+            notebook_path: notebooks/bronze/bronze_payments.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bucket_name: ${var.bucket_name}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: bronze_refunds
+          job_cluster_key: main
+          depends_on:
+            - task_key: setup_catalog
+          notebook_task:
+            notebook_path: notebooks/bronze/bronze_refunds.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bucket_name: ${var.bucket_name}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        # --- Silver: each depends on its own Bronze source only ---
+        - task_key: silver_customers
+          job_cluster_key: main
+          depends_on:
+            - task_key: bronze_customers
+          notebook_task:
+            notebook_path: notebooks/silver/silver_customers.py
+            base_parameters:
+              catalog: ${var.catalog}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: silver_orders
+          job_cluster_key: main
+          depends_on:
+            - task_key: bronze_orders
+          notebook_task:
+            notebook_path: notebooks/silver/silver_orders.py
+            base_parameters:
+              catalog: ${var.catalog}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: silver_memberships
+          job_cluster_key: main
+          depends_on:
+            - task_key: bronze_memberships
+          notebook_task:
+            notebook_path: notebooks/silver/silver_memberships.py
+            base_parameters:
+              catalog: ${var.catalog}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: silver_addresses
+          job_cluster_key: main
+          depends_on:
+            - task_key: bronze_addresses
+          notebook_task:
+            notebook_path: notebooks/silver/silver_addresses.py
+            base_parameters:
+              catalog: ${var.catalog}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: silver_payments
+          job_cluster_key: main
+          depends_on:
+            - task_key: bronze_payments
+          notebook_task:
+            notebook_path: notebooks/silver/silver_payments.py
+            base_parameters:
+              catalog: ${var.catalog}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: silver_refunds
+          job_cluster_key: main
+          depends_on:
+            - task_key: bronze_refunds
+          notebook_task:
+            notebook_path: notebooks/silver/silver_refunds.py
+            base_parameters:
+              catalog: ${var.catalog}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        # --- Gold: joins/aggregates over Silver ---
+        - task_key: gold_customer_address
+          job_cluster_key: main
+          depends_on:
+            - task_key: silver_customers
+            - task_key: silver_addresses
+          notebook_task:
+            notebook_path: notebooks/gold/gold_customer_address.py
+            base_parameters:
+              catalog: ${var.catalog}
+          max_retries: 1
+
+        - task_key: gold_order_summary_monthly
+          job_cluster_key: main
+          depends_on:
+            - task_key: silver_orders
+          notebook_task:
+            notebook_path: notebooks/gold/gold_order_summary_monthly.py
+            base_parameters:
+              catalog: ${var.catalog}
+          max_retries: 1
+
+        # --- Data quality: last, gates the run on every layer being healthy ---
+        - task_key: data_quality_checks
+          job_cluster_key: main
+          depends_on:
+            - task_key: gold_customer_address
+            - task_key: gold_order_summary_monthly
+            - task_key: silver_payments
+            - task_key: silver_refunds
+            - task_key: silver_memberships
+          notebook_task:
+            notebook_path: notebooks/data_quality/run_data_quality_checks.py
+            base_parameters:
+              catalog: ${var.catalog}
+          max_retries: 1
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://<your-workspace>.cloud.databricks.com
+    variables:
+      catalog: retailco_dev
+      bucket_name: <your-dev-bucket-name>
+
+  prod:
+    mode: production
+    workspace:
+      host: https://<your-workspace>.cloud.databricks.com
+    variables:
+      catalog: retailco
+      bucket_name: <your-prod-bucket-name>
